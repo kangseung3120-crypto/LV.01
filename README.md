@@ -6,3 +6,6 @@
 하이요
 
 f3223f
+
+x = "hello"
+print(x)
