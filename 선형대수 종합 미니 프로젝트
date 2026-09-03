@@ -1,0 +1,85 @@
+# 데이터 분석 파이프 라인 개관
+데이터로드 -> 정규화 -> PCA/SVD -> 2D 시각화
+
+
+| 분해 | 적용 대상 |        주요 용도           |
+| --- |    ---    |           ---              |
+| LU | 정사각행렬 | 연립방정식 풀이, 역행렬 계산 |
+| QR | 임의의 행렬 | 최소제곱법, 그람-슈미트 직교화 |
+| 고유분해 | 정사각(대각화 가능) 행렬 | 고유값 문제, 동역학계 분석 |
+| SVD | 모든 행렬 | 차원 축소, 저랭크 근사, 추천 시스템 |
+
+# 정규화와 벡터 연산 복습
+정규화(표준화)가 먼저인가
+벡터의 크기(노름)와 방향은 스케일에 민감하다.
+변수마다 단위가 다르면, 절대값이 큰 변수가 분산과 거리 계산을 지배해버린다.
+그래서 PCA/SVD를 적용하기 전에 변수를 평균 0, 분산 1로 맞추는 정규화(표준화) 과정이 필요하다.
+
+정규화를 안하면?
+특정 변수의 스케일이 크면 그 변수가 분산과 거리 계산을 독점해서, PCA의 주성분 방향이나 유사도 계산 결과가 그 변수 하나에 의해 왜곡될 수 있다.
+그래서 분석 전에 반드시 정규화를 거치는 것이 중요하다.
+
+import numpy as np
+
+X_mean = X.mean(axis=0)
+X_std = X.std(axis=0)
+X_scaled = (X - X_mean) / X_std
+
+# PCA/SVD 기반 차원축소와 2D 시각화
+고차원 데이터를 눈으로 보려면 변수가 수십 개인 고차원 데이터는 그대로 시각화할 수 없다.
+PCA 또는 SVD로 설명력이 가장 높은 2개의 축으로 투영하면, 산점도로 데이터의 군집 구조를 육안으로 확인할 수 있다.
+
+from sklearn.decomposition import PCA
+import matplotlib.pyplot as plt
+
+pca = PCA(n_components=2)
+X_2d = pca.fit_transform(X_scaled)
+
+plt.scatter(X_2d[:, 0], X_2d[:, 1])
+plt.xlabel("PC1")
+plt.ylabel("PC2")
+plt.show()
+
+# 코사인 유사도 기반 유사 샘플 탐색
+벡터 내적과 노름으로 정의되는 코사인 유사도
+코사인 유사도는 두 벡터의 내적을 각각의 노름(크기)으로 나눈 값으로, 벡터의 방향이 얼마나 비슷한지를 나타낸다.
+원본 고차원 공간과 차원축소된 공간에서 유사도를 각각 계산해보면, 축소 과정에서 어느 정도의 정보가 유지되고 있는지 간접적으로 확인할 수 있다.
+
+|    구분    |    원본 고차원 공간    | 차원축소된 공간(2D) |
+|    ---    |           ---           |       ---         |
+| 계산 비용 | 변수 수가 많을수록 증가 | 적은 차원으로 빠르게 계산 |
+| 유사도 정밀도 | 미세한 차이까지 반영 | 주요 패턴 중심으로 약간의 정보 손실 발생 |
+| 활용 목적 | 정밀한 검색·분석 | 빠른 탐색·시각화 |
+
+def cosine_similarity(a, b):
+    return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
+
+sim_original = cosine_similarity(X_scaled[0], X_scaled[1])
+sim_reduced = cosine_similarity(X_2d[0], X_2d[1])
+print(sim_original, sim_reduced)
+
+
+# NumPy 직접 구현 vs sklearn 결과 비교
+직접 규현해보고 검증하는 이유
+지금까지 NumPy로 직접 구현환 SVD/PCA 결과가 sklearn의 결과와 수학적으로 동일한지 검증해보는 것은 매우 중요하다.
+이 과정을 통해 라이브러리가 내부적으로 무엇을 하는지 이해하고, 결과에 대한 신뢰도를 스스로 확보할 수 있다.
+
+직접 구현할 줄 알아야 하나요, sklearn만 쓰면 안 되나요?
+실무에서는 sklearn을 주로 쓰지만, 내부 원리를 알아야 문제가 생겼을 때 원인을 파악하고 하이퍼파라미터를 적절히 튜닝할 수 있다.
+그래서 직접 구현과 검증 과정이 장기적으로 큰 도움이 된다.
+
+from sklearn.decomposition import PCA
+
+# NumPy 직접 구현
+U, S, Vt = np.linalg.svd(X_scaled, full_matrices=False)
+X_2d_manual = U[:, :2] * S[:2]
+
+# sklearn
+pca = PCA(n_components=2)
+X_2d_sklearn = pca.fit_transform(X_scaled)
+
+print(np.allclose(np.abs(X_2d_manual), np.abs(X_2d_sklearn), atol=1e-6))
+
+벡터,행렬,SVD가 앞으로 어디에 쓰일까
+지금까지 배운 벡터와 행렬, 고유분해, SVD는 이후 딥러닝을 배울 때 등장하는 텐서(Tensor)의 모양(Shape)을 이해하는 기초가 된다.
+또한 Attention 메커니즘은 벡터 내적과 유사도 개념을, Gradient 기반 최적화는 행렬 연산과 미분 개념을 그대로 확장해서 사용한다.
